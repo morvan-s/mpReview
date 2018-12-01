@@ -794,6 +794,17 @@ class mpReviewWidget(ScriptedLoadableModuleWidget, ModuleWidgetMixin):
         sNode.SetWriteFileFormat('nrrd')
         sNode.SetURI(None)
         success = sNode.WriteData(label)
+
+        # [DeepLiver] Saving the spacing and the special id in the nrrd file
+        # TODO: Check if the path work with unix based systems
+        path_segmentation = segmentationsDir + '\\' + uniqueID + '.nrrd'
+        data_nrrd, header_nrrd = nrrd.read(path_segmentation)
+        header_nrrd['spacings'] = label.GetSpacing()
+        header_nrrd['identifiant'] = 'monsuperid'
+        field_info = {'identifiant': 'string'}
+        nrrd.write(filename=path_segmentation, data=data_nrrd, header=header_nrrd,\
+                detached_header=False, custom_field_map=field_info)
+
         if success:
           savedMessage = savedMessage + label.GetName() + '\n'
           logging.debug(label.GetName() + ' has been saved to ' + labelFileName)
