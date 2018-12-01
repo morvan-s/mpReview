@@ -20,6 +20,13 @@ from SlicerDevelopmentToolboxUtils.helpers import WatchBoxAttribute
 from SlicerDevelopmentToolboxUtils.widgets import TargetCreationWidget, XMLBasedInformationWatchBox
 from SlicerDevelopmentToolboxUtils.icons import Icons
 
+# DeepLiver
+try:
+    import nrrd
+except ImportError, e:
+    import pip
+    pip.main(['install', 'pynrrd'])
+    import nrrd
 
 class mpReview(ScriptedLoadableModule, ModuleWidgetMixin):
 
@@ -31,8 +38,8 @@ class mpReview(ScriptedLoadableModule, ModuleWidgetMixin):
     parent.contributors = ["Andrey Fedorov (SPL)", "Robin Weiss (U. of Chicago)", "Alireza Mehrtash (SPL)",
                            "Christian Herz (SPL)"]
     parent.helpText = """
-    Multiparametric Image Review (mpReview) module is intended to support review and annotation of multiparametric 
-    image data. The driving use case for the development of this module was review and segmentation of the regions of 
+    Multiparametric Image Review (mpReview) module is intended to support review and annotation of multiparametric
+    image data. The driving use case for the development of this module was review and segmentation of the regions of
     interest in prostate cancer multiparametric MRI.
     """
     parent.acknowledgementText = """
@@ -1424,7 +1431,7 @@ class mpReviewWidget(ScriptedLoadableModuleWidget, ModuleWidgetMixin):
     sl = w.sliceLogic()
     ll = sl.GetLabelLayer()
     lv = ll.GetVolumeNode()
-    self.cvLogic.viewerPerVolume(self.volumeNodes, background=self.volumeNodes[0], label=lv, 
+    self.cvLogic.viewerPerVolume(self.volumeNodes, background=self.volumeNodes[0], label=lv,
                                  layout=[self.rows,self.cols])
 
     self.cvLogic.rotateToVolumePlanes(self.volumeNodes[0])
