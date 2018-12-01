@@ -510,9 +510,9 @@ class mpReviewWidget(ScriptedLoadableModuleWidget, ModuleWidgetMixin):
     if effectName in ["PaintEffect", "DrawEffect"]:
       toolOption = toolbox.currentOption
       attributes = ["radius", "paintOver", "thresholdPaint", "sphere", "smudge", "pixelMode"]
-      for attr in attributes:
-        if hasattr(toolOption, attr):
-          getattr(toolOption, attr).hide()
+      # for attr in attributes:
+      #   if hasattr(toolOption, attr):
+      #     getattr(toolOption, attr).hide()
     try:
       slicer.util.findChildren(self.editorWidget.toolsBox.optionsFrame, "EditorHelpButton")[0].hide()
     except IndexError:
