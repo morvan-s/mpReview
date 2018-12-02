@@ -818,8 +818,22 @@ class mpReviewWidget(ScriptedLoadableModuleWidget, ModuleWidgetMixin):
         path_segmentation = segmentationsDir + '\\' + uniqueID + '.nrrd'
         data_nrrd, header_nrrd = nrrd.read(path_segmentation)
         header_nrrd['spacings'] = label.GetSpacing()
-        header_nrrd['identifiant'] = 'monsuperid'
-        field_info = {'identifiant': 'string'}
+        dom = xml.dom.minidom.parse(os.path.join(self.inputDataDir, self.selectedStudyName, 'RESOURCES', labelSeries, 'Reconstructions', labelSeries + '.xml'))
+        root = dom.documentElement
+        nodelist=root.getElementsByTagName("element")
+        for node in nodelist:
+            if node.getAttribute("name")=="SeriesInstanceUID":
+                seriesinstanceuid = node.firstChild.data
+            if node.getAttribute("name")=="StudyInstanceUID":
+                studyinstanceuid = node.firstChild.data
+            if node.getAttribute("name")=="PatientID":
+                patientid = node.firstChild.data
+
+
+        header_nrrd['Series Instance UID'] = seriesinstanceuid
+        header_nrrd['Study Instance UID'] = studyinstanceuid
+        header_nrrd['Patient ID'] = patientid
+        field_info = {'Series Instance UID': 'string', 'Study Instance UID': 'string', 'Patient ID': 'string'}
         nrrd.write(filename=path_segmentation, data=data_nrrd, header=header_nrrd,\
                 detached_header=False, custom_field_map=field_info)
 
