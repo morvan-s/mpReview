@@ -8,6 +8,7 @@ from EditorLib import EditorLib
 import SimpleITK as sitk
 import sitkUtils
 import datetime
+import time
 from slicer.ScriptedLoadableModule import *
 
 from mpReviewPreprocessor import mpReviewPreprocessorLogic
@@ -16,6 +17,7 @@ from qSlicerMultiVolumeExplorerModuleWidget import qSlicerMultiVolumeExplorerSim
 from qSlicerMultiVolumeExplorerModuleHelper import qSlicerMultiVolumeExplorerModuleHelper as MVHelper
 
 from SlicerDevelopmentToolboxUtils.mixins import ModuleWidgetMixin, ModuleLogicMixin
+from SlicerDevelopmentToolboxUtils.buttons import WindowLevelEffectsButton
 from SlicerDevelopmentToolboxUtils.helpers import WatchBoxAttribute
 from SlicerDevelopmentToolboxUtils.widgets import TargetCreationWidget, XMLBasedInformationWatchBox
 from SlicerDevelopmentToolboxUtils.icons import Icons
@@ -28,6 +30,7 @@ except ImportError, e:
     pip.main(['install', 'pynrrd'])
     import nrrd
 
+
 class mpReview(ScriptedLoadableModule, ModuleWidgetMixin):
 
   def __init__(self, parent):
@@ -38,8 +41,8 @@ class mpReview(ScriptedLoadableModule, ModuleWidgetMixin):
     parent.contributors = ["Andrey Fedorov (SPL)", "Robin Weiss (U. of Chicago)", "Alireza Mehrtash (SPL)",
                            "Christian Herz (SPL)"]
     parent.helpText = """
-    Multiparametric Image Review (mpReview) module is intended to support review and annotation of multiparametric
-    image data. The driving use case for the development of this module was review and segmentation of the regions of
+    Multiparametric Image Review (mpReview) module is intended to support review and annotation of multiparametric 
+    image data. The driving use case for the development of this module was review and segmentation of the regions of 
     interest in prostate cancer multiparametric MRI.
     """
     parent.acknowledgementText = """
@@ -130,6 +133,8 @@ class mpReviewWidget(ScriptedLoadableModuleWidget, ModuleWidgetMixin):
       sc.SetForegroundOpacity(opacity)
 
   def updateViewRenderer (self):
+    toolbox = self.editorWidget.toolsBox
+    toolOption = toolbox.currentOption
     for widget in self.getAllSliceWidgets():
       view = widget.sliceView()
       view.scheduleRender()
@@ -164,6 +169,8 @@ class mpReviewWidget(ScriptedLoadableModuleWidget, ModuleWidgetMixin):
     self.setTabsEnabled([1,2], False)
 
   def onTabWidgetClicked(self, currentIndex):
+    toolbox = self.editorWidget.toolsBox
+    toolOption = toolbox.currentOption
     if self.currentTabIndex == currentIndex:
       return
     setNewIndex = False
@@ -222,7 +229,7 @@ class mpReviewWidget(ScriptedLoadableModuleWidget, ModuleWidgetMixin):
     self.dataDirButton = ctk.ctkDirectoryButton()
     self.studyAndSeriesSelectionWidgetLayout.addWidget(qt.QLabel("Data directory:"), 0, 0, 1, 1)
     self.studyAndSeriesSelectionWidgetLayout.addWidget(self.dataDirButton, 0, 1, 1, 2)
-
+  
     self.customLUTInfoIcon = self.createHelperLabel()
     self.studyAndSeriesSelectionWidgetLayout.addWidget(self.customLUTInfoIcon, 0, 2, 1, 1, qt.Qt.AlignRight)
     self.customLUTInfoIcon.hide()
@@ -263,8 +270,9 @@ class mpReviewWidget(ScriptedLoadableModuleWidget, ModuleWidgetMixin):
     self.segmentationWidgetLayout.addWidget(self.createHLayout([qt.QLabel("Reference image: "), self.refSelector]))
     self.setupMultiVolumeExplorerUI()
     self.setupLabelMapEditorUI()
+
     self.setupAdvancedSegmentationSettingsUI()
-    self.setupFiducialsUI()
+    #self.setupFiducialsUI()
     # keep here names of the views created by CompareVolumes logic
     self.viewNames = []
     self.segmentationWidgetLayout.addStretch(1)
@@ -283,7 +291,9 @@ class mpReviewWidget(ScriptedLoadableModuleWidget, ModuleWidgetMixin):
     self.structuresView = slicer.util.findChildren(self.editorWidget.volumes, 'StructuresView')[0]
 
     self.editorParameterNode = EditorLib.EditUtil.EditUtil.getParameterNode()
-    self.editorParameterNode.AddObserver(vtk.vtkCommand.ModifiedEvent, self.onEditorWidgetParameterNodeChanged)
+    self.editorParameterNode.AddObserver(vtk.vtkCommand.ModifiedEvent, self.onEditorWidgetParameterNodeChanged,1.0)
+    self.editorParameterNode.AddObserver(vtk.vtkCommand.ModifiedEvent, self.onEditorWidgetParameterNodeChanged2,-1.0)
+
 
     self.addCustomEditorButtons()
     self.editorWidget.toolsColor.colorSpin.setEnabled(False)
@@ -346,6 +356,8 @@ class mpReviewWidget(ScriptedLoadableModuleWidget, ModuleWidgetMixin):
     effectButtonFrame = slicer.util.findChildren(editBoxFrame, 'RowFrame1')[0]
     buttons = [c for c in effectButtonFrame.children() if isinstance(c, qt.QToolButton)]
     buttons.append(slicer.util.findChildren(editBoxFrame, 'DilateEffectToolButton')[0])
+    self.windowLevelEffectsButton = WindowLevelEffectsButton()
+    buttons.append(self.windowLevelEffectsButton)
     undoButton = slicer.util.findChildren(editBoxFrame, 'PreviousCheckPointToolButton')[0]
     redoButton = slicer.util.findChildren(editBoxFrame, 'NextCheckPointToolButton')[0]
 
@@ -371,11 +383,9 @@ class mpReviewWidget(ScriptedLoadableModuleWidget, ModuleWidgetMixin):
 
     self.deleteStructureButton = qt.QPushButton('Delete')
     self.propagateButton = qt.QPushButton('Propagate')
-    self.createFiducialsButton = qt.QPushButton('Create Fiducials')
 
     buttonsFrameLayout.addWidget(self.deleteStructureButton)
     buttonsFrameLayout.addWidget(self.propagateButton)
-    buttonsFrameLayout.addWidget(self.createFiducialsButton)
     self.propagateButton.hide()
 
   def setupAdvancedSegmentationSettingsUI(self):
@@ -444,16 +454,8 @@ class mpReviewWidget(ScriptedLoadableModuleWidget, ModuleWidgetMixin):
     self.fiducialsArea.text = "Fiducials"
     self.fiducialsArea.collapsed = True
 
-    self.fiducialsWidget = TargetCreationWidget()
-    self.fiducialsWidget.targetListSelectorVisible = True
-    self.segmentationWidgetLayout.addWidget(self.fiducialsWidget)
 
   def setupCompletionUI(self):
-    self.piradsButton = qt.QPushButton("PI-RADS v2 review form")
-    self.completionWidgetLayout.addWidget(self.piradsButton)
-
-    self.qaButton = qt.QPushButton("Quality Assurance form")
-    self.completionWidgetLayout.addWidget(self.qaButton)
 
     self.saveButton = qt.QPushButton("Save")
     self.completionWidgetLayout.addWidget(self.saveButton)
@@ -471,14 +473,12 @@ class mpReviewWidget(ScriptedLoadableModuleWidget, ModuleWidgetMixin):
       self.deselectAllSeriesButton.connect('clicked()', lambda: self.selectAllSeries(False))
       self.deleteStructureButton.connect('clicked()', self.onDeleteStructure)
       self.propagateButton.connect('clicked()', self.onPropagateROI)
-      self.createFiducialsButton.connect('clicked()', self.onCreateFiducialsButtonClicked)
       self.hardenTransformButton.connect('clicked(bool)', self.onHardenTransform)
       self.buildModelsButton.connect("clicked()", self.onBuildModels)
       self.modelsVisibilityButton.connect("toggled(bool)", self.onModelsVisibilityButton)
       self.labelMapVisibilityButton.connect("toggled(bool)", self.onLabelMapVisibilityButton)
       self.labelMapOutlineButton.connect('toggled(bool)', self.setLabelOutline)
-      self.piradsButton.connect('clicked()', self.onPIRADSFormClicked)
-      self.qaButton.connect('clicked()', self.onQAFormClicked)
+
       self.saveButton.connect('clicked()', self.onSaveClicked)
       for orientation in self.orientations:
         self.orientationButtons[orientation].connect("clicked()", lambda o=orientation: self.setOrientation(o))
@@ -503,80 +503,53 @@ class mpReviewWidget(ScriptedLoadableModuleWidget, ModuleWidgetMixin):
     setupSliderConnections()
     setupViewConnections()
     setupOtherConnections()
+    
+  def onEditorWidgetParameterNodeChanged2(self, caller, event=-1):
+    effectName = caller.GetParameter("effect")
+    toolbox = self.editorWidget.toolsBox
+    toolOption = toolbox.currentOption
+  
+
+    attributes = ["paintOver", "thresholdPaint", "smudge", "pixelMode"]
+    for attr in attributes:
+      if hasattr(toolOption, attr):
+        getattr(toolOption, attr).setVisible(False)
+
+
 
   def onEditorWidgetParameterNodeChanged(self, caller, event=-1):
     effectName = caller.GetParameter("effect")
     toolbox = self.editorWidget.toolsBox
-    if effectName in ["PaintEffect", "DrawEffect"]:
-      toolOption = toolbox.currentOption
-      attributes = ["radius", "paintOver", "thresholdPaint", "sphere", "smudge", "pixelMode"]
-      # for attr in attributes:
-      #   if hasattr(toolOption, attr):
-      #     getattr(toolOption, attr).hide()
+    toolOption = toolbox.currentOption
+
+
+
+    attributes = ["paintOver", "thresholdPaint", "smudge", "pixelMode"]
+    for attr in attributes:
+      if hasattr(toolOption, attr):
+        getattr(toolOption, attr).setVisible(False)
     try:
       slicer.util.findChildren(self.editorWidget.toolsBox.optionsFrame, "EditorHelpButton")[0].hide()
     except IndexError:
       pass
 
+
+
   def enter(self):
     userName = self.getSetting('UserName')
-    self.piradsFormURL = self.getSetting('piradsFormURL')
-    self.qaFormURL = self.getSetting('qaFormURL')
-
     if userName is None or userName == '':
-      # prompt the user for ID (last name)
-      self.namePrompt = qt.QDialog()
-      self.namePromptLayout = qt.QVBoxLayout()
-      self.namePrompt.setLayout(self.namePromptLayout)
-      self.nameLabel = qt.QLabel('Enter your last name:', self.namePrompt)
-      import getpass
-      self.nameText = qt.QLineEdit(getpass.getuser(), self.namePrompt)
-      self.nameButton = qt.QPushButton('OK', self.namePrompt)
-      self.nameButton.connect('clicked()', self.onNameEntered)
-      self.namePromptLayout.addWidget(self.nameLabel)
-      self.namePromptLayout.addWidget(self.nameText)
-      self.namePromptLayout.addWidget(self.nameButton)
-      self.namePrompt.exec_()
+      name = "DeepLiver"
+      self.setSetting('UserName', name)
+      self.parameters['UserName'] = name
+      url="http://goo.gl/nT1z4L"
+      self.setSetting('qaFormURL',url) 
+      self.setSetting('piradsFormURL',url)
+      self.piradsFormURL = url
+      self.qaFormURL = url
+
     else:
       self.parameters['UserName'] = userName
 
-    if self.piradsFormURL is None or self.piradsFormURL == '':
-      # prompt the user for the review form
-      # Note: it is expected that the module uses the form of the structure as
-      # in http://goo.gl/nT1z4L. The known structure of the form is used to
-      # pre-populate the fields corresponding to readerName, studyName and
-      # lesionID.
-      self.URLPrompt = qt.QDialog()
-      self.URLPromptLayout = qt.QVBoxLayout()
-      self.URLPrompt.setLayout(self.URLPromptLayout)
-      self.URLLabel = qt.QLabel('Enter PI-RADS review form URL:', self.URLPrompt)
-      # replace this if you are using a different form
-      self.URLText = qt.QLineEdit(self.PIRADS_VIEWFORM_URL)
-      self.URLButton = qt.QPushButton('OK', self.URLPrompt)
-      self.URLButton.connect('clicked()', self.onPIRADSURLEntered)
-      self.URLPromptLayout.addWidget(self.URLLabel)
-      self.URLPromptLayout.addWidget(self.URLText)
-      self.URLPromptLayout.addWidget(self.URLButton)
-      self.URLPrompt.exec_()
-
-      if self.qaFormURL is None or self.qaFormURL == '':
-        # prompt the user for the review form
-        # Note: it is expected that the module uses the form of the structure as
-        # in http://goo.gl/nT1z4L. The known structure of the form is used to
-        # pre-populate the fields corresponding to readerName, studyName and
-        # lesionID.
-        self.URLPrompt = qt.QDialog()
-        self.URLPromptLayout = qt.QVBoxLayout()
-        self.URLPrompt.setLayout(self.URLPromptLayout)
-        self.URLLabel = qt.QLabel('Enter QA review form URL:', self.URLPrompt)
-        # replace this if you are using a different form
-        self.URLText = qt.QLineEdit(self.QA_VIEWFORM_URL)
-        self.URLButton = qt.QPushButton('OK', self.URLPrompt)
-        self.URLButton.connect('clicked()', self.onQAURLEntered)
-        self.URLPromptLayout.addWidget(self.URLLabel)
-        self.URLPromptLayout.addWidget(self.URLText)
-        self.URLPromptLayout.addWidget(self.URLButton)
-        self.URLPrompt.exec_()
 
     '''
     # ask where is the input
@@ -673,6 +646,7 @@ class mpReviewWidget(ScriptedLoadableModuleWidget, ModuleWidgetMixin):
   #     self.parameters['ResultsLocation'] = path
 
   def onViewUpdateRequested(self, id):
+   
     # Skip if not in a ref image yet
     if self.refSeriesNumber == '-1':
       return
@@ -695,6 +669,7 @@ class mpReviewWidget(ScriptedLoadableModuleWidget, ModuleWidgetMixin):
                                                                                             qt.QModelIndex())))
     logging.debug('Row number: '+str(modelIndex.row()))
     self.updateSegmentationTabAvailability()
+	
 
   def updateSegmentationTabAvailability(self):
     self.setTabsEnabled([1], any(sItem.checkState() == 2 for sItem in self.seriesItems))
@@ -794,7 +769,6 @@ class mpReviewWidget(ScriptedLoadableModuleWidget, ModuleWidgetMixin):
         sNode.SetWriteFileFormat('nrrd')
         sNode.SetURI(None)
         success = sNode.WriteData(label)
-
         # [DeepLiver] Saving the spacing and the special id in the nrrd file
         # TODO: Check if the path work with unix based systems
         path_segmentation = segmentationsDir + '\\' + uniqueID + '.nrrd'
@@ -805,6 +779,7 @@ class mpReviewWidget(ScriptedLoadableModuleWidget, ModuleWidgetMixin):
         nrrd.write(filename=path_segmentation, data=data_nrrd, header=header_nrrd,\
                 detached_header=False, custom_field_map=field_info)
 
+        
         if success:
           savedMessage = savedMessage + label.GetName() + '\n'
           logging.debug(label.GetName() + ' has been saved to ' + labelFileName)
@@ -813,14 +788,7 @@ class mpReviewWidget(ScriptedLoadableModuleWidget, ModuleWidgetMixin):
 
   def saveTargets(self, username, timestamp):
     savedMessage = ""
-    fiducialsNode = self.fiducialsWidget.currentNode
-    if fiducialsNode:
-      targetsDir = os.path.join(self.inputDataDir, self.selectedStudyName, 'Targets')
-      self.logic.createDirectory(targetsDir)
-      targetFileName = username+'-'+timestamp+'.fcsv'
-      path = os.path.join(targetsDir, targetFileName)
-      if slicer.util.saveNode(fiducialsNode, path):
-        savedMessage = 'Fiducials were saved'
+
     return savedMessage
 
   def onBuildModels(self):
@@ -1009,6 +977,7 @@ class mpReviewWidget(ScriptedLoadableModuleWidget, ModuleWidgetMixin):
       if not success:
         return False,None
       logging.debug('Setting loaded label name to '+volumeName)
+      actualFileName = os.path.split(fileName)[1]
       label.SetName(volumeName+'-'+structure+'-label')
       label.RemoveAllDisplayNodeIDs()
 
@@ -1067,6 +1036,7 @@ class mpReviewWidget(ScriptedLoadableModuleWidget, ModuleWidgetMixin):
     mbox.addButton(qt.QMessageBox.Cancel)
     mbox.exec_()
     selectedButton = mbox.clickedButton()
+    
     if selectedButton in [browseButton, okButton]:
       if selectedButton is browseButton:
         selectedDir = qt.QFileDialog.getExistingDirectory(None, self.inputDataDir)
@@ -1235,6 +1205,7 @@ class mpReviewWidget(ScriptedLoadableModuleWidget, ModuleWidgetMixin):
       fileName = self.seriesMap[seriesNumber]['NRRDLocation']
       (success,volume) = slicer.util.loadVolume(fileName,returnNode=True)
       if success:
+
         if volume.GetClassName() == 'vtkMRMLScalarVolumeNode':
           self.seriesMap[seriesNumber]['Volume'] = volume
           self.seriesMap[seriesNumber]['Volume'].SetName(shortName)
@@ -1305,8 +1276,8 @@ class mpReviewWidget(ScriptedLoadableModuleWidget, ModuleWidgetMixin):
     if mostRecent != "":
       path = os.path.join(self.targetsDir, mostRecent)
       if slicer.util.loadMarkupsFiducialList(path):
-        self.fiducialsWidget.currentNode = slicer.util.getFirstNodeByName(mostRecent.split(".")[0])
-
+        pass
+      
   def checkForMultiVolumes(self):
     multiVolumes = self.getMultiVolumes()
     self.multiVolumeExplorer.showInputMultiVolumeSelector(len(multiVolumes) > 1)
@@ -1433,6 +1404,7 @@ class mpReviewWidget(ScriptedLoadableModuleWidget, ModuleWidgetMixin):
     self.updateEditorAvailability()
 
     self.multiVolumeExplorer.refreshObservers()
+    self.windowLevelEffectsButton.refreshForAllAvailableSliceWidgets()
     logging.debug('Exiting onReferenceChanged')
 
   '''
@@ -1442,7 +1414,7 @@ class mpReviewWidget(ScriptedLoadableModuleWidget, ModuleWidgetMixin):
     sl = w.sliceLogic()
     ll = sl.GetLabelLayer()
     lv = ll.GetVolumeNode()
-    self.cvLogic.viewerPerVolume(self.volumeNodes, background=self.volumeNodes[0], label=lv,
+    self.cvLogic.viewerPerVolume(self.volumeNodes, background=self.volumeNodes[0], label=lv, 
                                  layout=[self.rows,self.cols])
 
     self.cvLogic.rotateToVolumePlanes(self.volumeNodes[0])
@@ -1566,24 +1538,18 @@ class mpReviewWidget(ScriptedLoadableModuleWidget, ModuleWidgetMixin):
     self.createFiducialsPrompt = qt.QDialog()
     self.createFiducialsPrompt.setWindowFlags(qt.Qt.WindowStaysOnTopHint)
     fiducialsPromptLayout = qt.QVBoxLayout()
-    self.createFiducialsPrompt.setLayout(fiducialsPromptLayout)
-
-    fiducialsPromptLayout.addWidget(qt.QLabel("Select structures you wish to create fiducials from "))
-
-    self.fiducialsPromptListView = qt.QListView()
-    self.fiducialsPromptListView.setSpacing(3)
-    self.fiducialsPromptListView.setEditTriggers(qt.QAbstractItemView.NoEditTriggers)
 
     self.updateEligibleLabelList()
-    fiducialsPromptLayout.addWidget(self.fiducialsPromptListView)
 
-    propagateButton = qt.QPushButton('Create Fiducials', self.fiducialsPromptListView)
-    propagateButton.clicked.connect(self.onAcceptFiducialsPrompt)
-    fiducialsPromptLayout.addWidget(propagateButton)
+    #propagateButton = qt.QPushButton('Create Fiducials', self.fiducialsPromptListView)
+    #propagateButton.clicked.connect(self.onAcceptFiducialsPrompt)
+    #fiducialsPromptLayout.addWidget(propagateButton)
 
-    self.createFiducialsPrompt.show()
-    self.createFiducialsPrompt.finished.connect(self.onFiducialPromptClosed)
-    self.structuresView.connect("activated(QModelIndex)", self.onStructureClickedOrAdded)
+    #self.createFiducialsPrompt.show()
+    #self.createFiducialsPrompt.finished.connect(self.onFiducialPromptClosed)
+
+
+
 
   def onFiducialPromptClosed(self):
     self.structuresView.disconnect("activated(QModelIndex)", self.onStructureClickedOrAdded)
@@ -1596,7 +1562,6 @@ class mpReviewWidget(ScriptedLoadableModuleWidget, ModuleWidgetMixin):
 
   def onAcceptFiducialsPrompt(self):
     self.createFiducialsPrompt.close()
-    fiducialNode = self.fiducialsWidget.getOrCreateFiducialNode()
     addedFiducialIds = []
     for idx in range(self.fiducialLabelPropagateModel.rowCount()):
       item = self.fiducialLabelPropagateModel.item(idx)
@@ -1826,7 +1791,6 @@ class mpReviewWidget(ScriptedLoadableModuleWidget, ModuleWidgetMixin):
       return
 
     labelNode = slicer.util.getNode(selectedLabel)
-
     # Lock out the editor and ref selector
     self.editorWidget.volumes.enabled = False
     self.editorWidget.editLabelMapsFrame.enabled = False
@@ -2034,7 +1998,6 @@ class mpReviewLogic(ScriptedLoadableModuleLogic):
   def abbreviateName(meta):
     try:
       description = meta['SeriesDescription']
-      print description
       seriesNumber = meta['SeriesNumber']
     except:
       description = meta['DerivedSeriesDescription']
@@ -2094,10 +2057,10 @@ class mpReviewLogic(ScriptedLoadableModuleLogic):
           metaFile = os.path.join(root, currentXMLFile)
           logging.debug('Current XML File: ' + metaFile)
           try:
-            (seriesNumber, seriesName) = mpReviewLogic.getSeriesInfoFromXML(metaFile)
+            (seriesNumber,seriesName) = mpReviewLogic.getSeriesInfoFromXML(metaFile)
             logging.debug(str(seriesNumber)+' '+seriesName)
-          except Exception as exc:
-            logging.error('Failed to get from XML: %s' % str(exc))
+          except:
+            logging.debug('Failed to get from XML')
             continue
 
           if updateProgressCallback:
@@ -2143,7 +2106,7 @@ class mpReviewLogic(ScriptedLoadableModuleLogic):
 
     dom = xml.dom.minidom.parse(f)
     number = findElement(dom, 'SeriesNumber')
-    name = findElement(dom, 'SeriesDescription').encode('utf-8').strip()
+    name = findElement(dom, 'SeriesDescription')
     return number, name.replace('-','').replace('(','').replace(')','')
 
   def formatDate(self, extractedDate):
