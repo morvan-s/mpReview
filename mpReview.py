@@ -41,8 +41,8 @@ class mpReview(ScriptedLoadableModule, ModuleWidgetMixin):
     parent.contributors = ["Andrey Fedorov (SPL)", "Robin Weiss (U. of Chicago)", "Alireza Mehrtash (SPL)",
                            "Christian Herz (SPL)"]
     parent.helpText = """
-    Multiparametric Image Review (mpReview) module is intended to support review and annotation of multiparametric 
-    image data. The driving use case for the development of this module was review and segmentation of the regions of 
+    Multiparametric Image Review (mpReview) module is intended to support review and annotation of multiparametric
+    image data. The driving use case for the development of this module was review and segmentation of the regions of
     interest in prostate cancer multiparametric MRI.
     """
     parent.acknowledgementText = """
@@ -229,7 +229,7 @@ class mpReviewWidget(ScriptedLoadableModuleWidget, ModuleWidgetMixin):
     self.dataDirButton = ctk.ctkDirectoryButton()
     self.studyAndSeriesSelectionWidgetLayout.addWidget(qt.QLabel("Data directory:"), 0, 0, 1, 1)
     self.studyAndSeriesSelectionWidgetLayout.addWidget(self.dataDirButton, 0, 1, 1, 2)
-  
+
     self.customLUTInfoIcon = self.createHelperLabel()
     self.studyAndSeriesSelectionWidgetLayout.addWidget(self.customLUTInfoIcon, 0, 2, 1, 1, qt.Qt.AlignRight)
     self.customLUTInfoIcon.hide()
@@ -503,12 +503,12 @@ class mpReviewWidget(ScriptedLoadableModuleWidget, ModuleWidgetMixin):
     setupSliderConnections()
     setupViewConnections()
     setupOtherConnections()
-    
+
   def onEditorWidgetParameterNodeChanged2(self, caller, event=-1):
     effectName = caller.GetParameter("effect")
     toolbox = self.editorWidget.toolsBox
     toolOption = toolbox.currentOption
-  
+
 
     attributes = ["paintOver", "thresholdPaint", "smudge", "pixelMode"]
     for attr in attributes:
@@ -542,7 +542,7 @@ class mpReviewWidget(ScriptedLoadableModuleWidget, ModuleWidgetMixin):
       self.setSetting('UserName', name)
       self.parameters['UserName'] = name
       url="http://goo.gl/nT1z4L"
-      self.setSetting('qaFormURL',url) 
+      self.setSetting('qaFormURL',url)
       self.setSetting('piradsFormURL',url)
       self.piradsFormURL = url
       self.qaFormURL = url
@@ -646,7 +646,7 @@ class mpReviewWidget(ScriptedLoadableModuleWidget, ModuleWidgetMixin):
   #     self.parameters['ResultsLocation'] = path
 
   def onViewUpdateRequested(self, id):
-   
+
     # Skip if not in a ref image yet
     if self.refSeriesNumber == '-1':
       return
@@ -669,7 +669,7 @@ class mpReviewWidget(ScriptedLoadableModuleWidget, ModuleWidgetMixin):
                                                                                             qt.QModelIndex())))
     logging.debug('Row number: '+str(modelIndex.row()))
     self.updateSegmentationTabAvailability()
-	
+
 
   def updateSegmentationTabAvailability(self):
     self.setTabsEnabled([1], any(sItem.checkState() == 2 for sItem in self.seriesItems))
@@ -774,12 +774,25 @@ class mpReviewWidget(ScriptedLoadableModuleWidget, ModuleWidgetMixin):
         path_segmentation = segmentationsDir + '\\' + uniqueID + '.nrrd'
         data_nrrd, header_nrrd = nrrd.read(path_segmentation)
         header_nrrd['spacings'] = label.GetSpacing()
-        header_nrrd['identifiant'] = 'monsuperid'
-        field_info = {'identifiant': 'string'}
+        dom = xml.dom.minidom.parse(os.path.join(self.inputDataDir, self.selectedStudyName, 'RESOURCES', labelSeries, 'Reconstructions', labelSeries + '.xml'))
+        root = dom.documentElement
+        nodelist=root.getElementsByTagName("element")
+        for node in nodelist:
+            if node.getAttribute("name")=="SeriesInstanceUID":
+                seriesinstanceuid = node.firstChild.data
+            if node.getAttribute("name")=="StudyInstanceUID":
+                studyinstanceuid = node.firstChild.data
+            if node.getAttribute("name")=="PatientID":
+                patientid = node.firstChild.data
+
+        header_nrrd['Series Instance UID'] = seriesinstanceuid
+        header_nrrd['Study Instance UID'] = studyinstanceuid
+        header_nrrd['Patient ID'] = patientid
+        field_info = {'Series Instance UID': 'string', 'Study Instance UID': 'string', 'Patient ID': 'string'}
         nrrd.write(filename=path_segmentation, data=data_nrrd, header=header_nrrd,\
                 detached_header=False, custom_field_map=field_info)
 
-        
+
         if success:
           savedMessage = savedMessage + label.GetName() + '\n'
           logging.debug(label.GetName() + ' has been saved to ' + labelFileName)
@@ -1036,7 +1049,7 @@ class mpReviewWidget(ScriptedLoadableModuleWidget, ModuleWidgetMixin):
     mbox.addButton(qt.QMessageBox.Cancel)
     mbox.exec_()
     selectedButton = mbox.clickedButton()
-    
+
     if selectedButton in [browseButton, okButton]:
       if selectedButton is browseButton:
         selectedDir = qt.QFileDialog.getExistingDirectory(None, self.inputDataDir)
@@ -1277,7 +1290,7 @@ class mpReviewWidget(ScriptedLoadableModuleWidget, ModuleWidgetMixin):
       path = os.path.join(self.targetsDir, mostRecent)
       if slicer.util.loadMarkupsFiducialList(path):
         pass
-      
+
   def checkForMultiVolumes(self):
     multiVolumes = self.getMultiVolumes()
     self.multiVolumeExplorer.showInputMultiVolumeSelector(len(multiVolumes) > 1)
@@ -1414,7 +1427,7 @@ class mpReviewWidget(ScriptedLoadableModuleWidget, ModuleWidgetMixin):
     sl = w.sliceLogic()
     ll = sl.GetLabelLayer()
     lv = ll.GetVolumeNode()
-    self.cvLogic.viewerPerVolume(self.volumeNodes, background=self.volumeNodes[0], label=lv, 
+    self.cvLogic.viewerPerVolume(self.volumeNodes, background=self.volumeNodes[0], label=lv,
                                  layout=[self.rows,self.cols])
 
     self.cvLogic.rotateToVolumePlanes(self.volumeNodes[0])
