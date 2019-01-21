@@ -760,7 +760,7 @@ class mpReviewWidget(ScriptedLoadableModuleWidget, ModuleWidgetMixin):
       # Only save labels with known structure names
       if any(structureName == s for s in self.structureNames):
         logging.debug("structure name is: %s" % structureName)
-        uniqueID = username + '-' + structureName + '-' + timestamp
+        uniqueID = structureName + '-' + timestamp
 
         labelFileName = os.path.join(segmentationsDir, uniqueID + '.nrrd')
 
@@ -785,10 +785,11 @@ class mpReviewWidget(ScriptedLoadableModuleWidget, ModuleWidgetMixin):
             if node.getAttribute("name")=="PatientID":
                 patientid = node.firstChild.data
 
+        header_nrrd['Label'] = structureName
         header_nrrd['Series Instance UID'] = seriesinstanceuid
         header_nrrd['Study Instance UID'] = studyinstanceuid
         header_nrrd['Patient ID'] = patientid
-        field_info = {'Series Instance UID': 'string', 'Study Instance UID': 'string', 'Patient ID': 'string'}
+        field_info = {'Label': 'string','Series Instance UID': 'string', 'Study Instance UID': 'string', 'Patient ID': 'string'}
         nrrd.write(filename=path_segmentation, data=data_nrrd, header=header_nrrd,\
                 detached_header=False, custom_field_map=field_info)
 
